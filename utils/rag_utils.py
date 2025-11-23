@@ -3,7 +3,7 @@
 import os
 import logging
 from typing import List, Tuple
-from models.embeddings import get_embeddings, get_embedding_dimension
+from models.embeddings import get_embeddings
 from config.config import VECTOR_DIR, TOP_K
 
 import faiss
@@ -15,7 +15,7 @@ CHUNK_OVERLAP = 64
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
     """
-    Simple sliding window chunker.
+    Simple sliding window chunker by words.
     """
     if not text:
         return []
@@ -24,7 +24,7 @@ def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVE
     chunks = []
     i = 0
     while i < len(tokens):
-        chunk = tokens[i:i+chunk_size]
+        chunk = tokens[i:i + chunk_size]
         chunks.append(" ".join(chunk))
         i += chunk_size - overlap
 
@@ -39,7 +39,7 @@ class FAISSStore:
         self.index_file = os.path.join(path, "faiss.index")
         self.meta_file = os.path.join(path, "meta.npy")
         self.index = None
-        self.metadata = []
+        self.metadata: List[dict] = []
 
         self._load_or_init()
 
@@ -74,7 +74,7 @@ class FAISSStore:
 
     def query(self, vector: List[float], k: int = TOP_K) -> List[Tuple[dict, float]]:
         """
-        Safe query — checks if index is empty.
+        Safe query — handles empty index and metadata bounds.
         """
         try:
             if self.index.ntotal == 0:
@@ -84,18 +84,46 @@ class FAISSStore:
             D, I = self.index.search(vec, k)
             results = []
             for idx, dist in zip(I[0], D[0]):
-                if idx < len(self.metadata):
+                if 0 <= idx < len(self.metadata):
                     results.append((self.metadata[idx], float(dist)))
             return results
-
         except Exception as e:
             logging.exception("FAISS query failed: %s", e)
             return []
+
+    def clear(self):
+        """
+        Clear index and metadata, and delete saved files.
+        """
+        try:
+            self.index = faiss.IndexFlatL2(self.dim)
+            self.metadata = []
+            if os.path.exists(self.index_file):
+                os.remove(self.index_file)
+            if os.path.exists(self.meta_file):
+                os.remove(self.meta_file)
+        except Exception as e:
+            logging.exception("Failed to clear FAISS store: %s", e)
+
+    def list_sources(self) -> List[Tuple[str, int]]:
+        """
+        Returns list of (source_name, chunk_count) for UI display.
+        """
+        if not self.metadata:
+            return []
+
+        counts = {}
+        for m in self.metadata:
+            src = m.get("source", "Unknown")
+            counts[src] = counts.get(src, 0) + 1
+
+        return sorted(counts.items(), key=lambda x: x[0])
 
 
 def build_or_update_index_from_documents(docs: List[dict], store: FAISSStore):
     """
     docs: List[{"id":..., "text":..., "source":...}]
+    Chunk, embed, upsert.
     """
     all_chunks = []
     metas = []
