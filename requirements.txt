@@ -1,0 +1,8 @@
+streamlit>=1.25.0
+groq>=0.9.0
+sentence-transformers>=2.2.2
+torch       # CPU is enough, no GPU required on small models
+faiss-cpu
+numpy
+requests
+python-dotenv

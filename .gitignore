@@ -1,0 +1,24 @@
+# Virtual environments
+chatbotvenv/
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Vector index / generated data
+vectors/
+*.sqlite
+*.db
+
+# Streamlit stuff
+.streamlit/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
